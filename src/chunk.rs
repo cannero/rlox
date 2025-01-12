@@ -1,21 +1,32 @@
 use crate::op_code::OpCode;
 
+pub trait OpCodeVisitor {
+    fn operate(&mut self, code: &OpCode, line: usize);
+}
+
+struct Instruction {
+    code: OpCode,
+    line: usize,
+}
+
 pub struct Chunk {
-    codes: Vec<OpCode>,
+    instructions: Vec<Instruction>,
 }
 
 impl Chunk {
     pub fn new() -> Self {
-        Self {codes: vec![]}
+        Self {instructions: vec![]}
     }
 
-    pub fn write(&mut self, code: OpCode) {
-        self.codes.push(code);
+    pub fn write(&mut self, code: OpCode, line: usize) {
+        self.instructions.push(
+            Instruction { code, line}
+        );
     }
 
-    pub fn operate_on_codes(&self, op: fn(&OpCode)) {
-        for code in &self.codes {
-            op(code);
+    pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {
+        for Instruction{code, line} in &self.instructions {
+            op.operate(code, *line);
         }
     }
 }

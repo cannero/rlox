@@ -1,5 +1,5 @@
 #[derive(Debug)]
 pub enum OpCode {
-    Constant,
+    Constant(f32),
     Return,
 }
