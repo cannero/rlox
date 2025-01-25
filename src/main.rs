@@ -1,7 +1,6 @@
 // (setq rustic-run-arguments "-- c:/tmp/simple.lox")
 use std::{env, fs, process::exit};
 
-use scanner::{Scanner, TokenType};
 use vm::{InterpretResult, VM};
 
 mod chunk;

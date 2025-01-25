@@ -1,7 +1,7 @@
 use crate::{chunk::{Chunk, OpCodeVisitor}, op_code::OpCode};
 
 pub struct Debugger {
-    last_line: usize,
+    last_line: i32,
 }
 
 impl Debugger {
@@ -17,7 +17,7 @@ impl Debugger {
 }
 
 impl OpCodeVisitor for Debugger {
-    fn operate(&mut self, code: &OpCode, line: usize) {
+    fn operate(&mut self, code: &OpCode, line: i32) {
         let line_or_placeholder = if line == self.last_line {
             "|".to_string()
         } else {

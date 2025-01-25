@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen, RightParen,
@@ -22,9 +22,15 @@ pub enum TokenType {
     Eof,
 }
 
+impl From<TokenType> for usize {
+    fn from(value: TokenType) -> Self {
+        value as usize
+    }
+}
+
 pub type ScanResult = Result<Token, ErrorToken>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub line: i32,
@@ -50,8 +56,12 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(source: String) -> Self {
+    pub fn new(source: &str) -> Self {
         Self { source: source.chars().collect(), line: 1, start: 0, current: 0 }
+    }
+
+    pub fn lexeme(&self, token: &Token) -> String {
+        self.source[token.start..token.start+token.length].iter().collect()
     }
 
     pub fn scan_token(&mut self) -> ScanResult {
@@ -276,6 +286,14 @@ impl Scanner {
     fn is_alpha(&self, c: char) -> bool {
         c.is_alphabetic() || c == '_'
     }
+
+    pub fn get_lexeme(&self, token: &Token) -> String {
+        self.source[token.start..token.start+token.length].iter().collect::<String>()
+    }
+
+    pub fn get_lexeme_error(&self, token: &ErrorToken) -> String {
+        self.source[token.start..token.start+token.length].iter().collect::<String>()
+    }
 }
 
 #[cfg(test)]
@@ -283,7 +301,7 @@ mod tests {
     use super::*;
 
     fn create(source: &str) -> Scanner {
-        Scanner::new(source.to_string())
+        Scanner::new(source)
     }
 
     fn assert_token(result: ScanResult, expected: Token) {

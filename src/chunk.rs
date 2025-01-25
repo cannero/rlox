@@ -1,7 +1,7 @@
 use crate::op_code::{Instruction, OpCode};
 
 pub trait OpCodeVisitor {
-    fn operate(&mut self, code: &OpCode, line: usize);
+    fn operate(&mut self, code: &OpCode, line: i32);
 }
 
 pub struct Chunk {
@@ -14,7 +14,7 @@ impl Chunk {
         Self {instructions: vec![], ip: 0}
     }
 
-    pub fn write(&mut self, code: OpCode, line: usize) {
+    pub fn write(&mut self, code: OpCode, line: i32) {
         self.instructions.push(
             Instruction { code, line}
         );

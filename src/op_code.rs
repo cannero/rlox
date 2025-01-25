@@ -12,5 +12,5 @@ pub enum OpCode {
 
 pub struct Instruction {
     pub code: OpCode,
-    pub line: usize,
+    pub line: i32,
 }

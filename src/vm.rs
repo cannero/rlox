@@ -1,7 +1,6 @@
-use crate::{chunk::{Chunk, OpCodeVisitor}, compiler::Compiler, op_code::OpCode};
+use crate::{chunk::Chunk, compiler::compile, op_code::OpCode};
 
 pub struct VM {
-//    chunk: Chunk,
     ip: usize,
     stack: Vec<f32>,
 }
@@ -33,43 +32,44 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
-        let mut compiler = Compiler::new();
-        compiler.compile(source);
-        InterpretResult::Ok
+        match compile(source) {
+            Ok(chunk) => self.run(chunk),
+            Err(_) => InterpretResult::CompileError,
+        }
     }
 
-    // fn run(&mut self) -> InterpretResult {
-    //     loop {
-    //         let instr = self.chunk.read_instruction();
-    //         match instr.code {
-    //             OpCode::Constant(x) => {
-    //                 self.push(x);
-    //             }
-    //             OpCode::Add => {
-    //                 binary_op!(self, +);
-    //             },
-    //             OpCode::Subtract => {
-    //                 binary_op!(self, -);
-    //             }
-    //             OpCode::Multiply => {
-    //                 binary_op!(self, *);
-    //             }
-    //             OpCode::Divide => {
-    //                 binary_op!(self, /);
-    //             }
-    //             OpCode::Negate => {
-    //                 let value = self.pop();
-    //                 self.stack.push(-value);
-    //             }
-    //             OpCode::Return => {
-    //                 if let Some(x) = self.stack.pop() {
-    //                     println!("{x}")
-    //                 }
-    //                 return InterpretResult::Ok
-    //             },
-    //         }
-    //     }
-    // }
+    fn run(&mut self, mut chunk: Chunk) -> InterpretResult {
+        loop {
+            let instr = chunk.read_instruction();
+            match instr.code {
+                OpCode::Constant(x) => {
+                    self.push(x);
+                }
+                OpCode::Add => {
+                    binary_op!(self, +);
+                },
+                OpCode::Subtract => {
+                    binary_op!(self, -);
+                }
+                OpCode::Multiply => {
+                    binary_op!(self, *);
+                }
+                OpCode::Divide => {
+                    binary_op!(self, /);
+                }
+                OpCode::Negate => {
+                    let value = self.pop();
+                    self.stack.push(-value);
+                }
+                OpCode::Return => {
+                    if let Some(x) = self.stack.pop() {
+                        println!("{x}")
+                    }
+                    return InterpretResult::Ok
+                }
+            }
+        }
+    }
 
     fn pop(&mut self) -> f32 {
         self.stack.pop().expect("VM stack was empty")
@@ -79,11 +79,3 @@ impl VM {
         self.stack.push(value);
     }
 }
-
-// impl OpCodeVisitor for VM {
-//     fn operate(&mut self, code: &OpCode, line: usize) {
-//         match code {
-//             OpCode::Return => Inte
-//         }
-//     }
-// }
