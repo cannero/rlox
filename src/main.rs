@@ -1,23 +1,31 @@
-use chunk::Chunk;
-use debug::Debugger;
-use op_code::OpCode;
-use vm::VM;
+// (setq rustic-run-arguments "-- c:/tmp/simple.lox")
+use std::{env, fs, process::exit};
+
+use scanner::{Scanner, TokenType};
+use vm::{InterpretResult, VM};
 
 mod chunk;
+mod compiler;
 mod debug;
 mod op_code;
+mod scanner;
 mod vm;
 
 fn main() {
-    let mut debugger = Debugger::new();
-    let mut chunk = Chunk::new();
-    chunk.write(OpCode::Constant(1.23), 3);
-    chunk.write(OpCode::Negate, 3);
-    chunk.write(OpCode::Constant(2.89), 3);
-    chunk.write(OpCode::Add, 3);
-    chunk.write(OpCode::Return, 3);
-    debugger.disassemble_chunk(&chunk, "test chunk");
+    let arguments: Vec<String> = env::args().collect();
+    if arguments.len() >= 2 {
+        run_file(&arguments[arguments.len() - 1]);
+    } else {
+        eprintln!("missing filename");
+    }
+}
 
-    let mut vm = VM::new(chunk);
-    vm.interpret();
+fn run_file(filename: &str) {
+    let file = fs::read_to_string(filename).expect("file not found");
+    let mut vm = VM::new();
+    match vm.interpret(file) {
+        InterpretResult::Ok => (),
+        InterpretResult::CompileError => exit(65),
+        InterpretResult::RuntimeError => exit(70),
+    }
 }
