@@ -1,4 +1,4 @@
-use crate::{chunk::Chunk, compiler::compile, op_code::OpCode};
+use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode};
 
 pub struct VM {
     ip: usize,
@@ -31,9 +31,15 @@ impl VM {
         Self { ip: 0, stack: vec![] }
     }
 
-    pub fn interpret(&mut self, source: String) -> InterpretResult {
-        match compile(source) {
-            Ok(chunk) => self.run(chunk),
+    pub fn interpret(&mut self, source: String, debug: bool) -> InterpretResult {
+        match compile(source, debug) {
+            Ok(chunk) => {
+                if debug {
+                    let mut debugger = Debugger::new();
+                    debugger.disassemble_chunk(&chunk, "code");
+                }
+                self.run(chunk)
+            },
             Err(_) => InterpretResult::CompileError,
         }
     }

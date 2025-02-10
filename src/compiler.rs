@@ -4,7 +4,7 @@ use crate::{chunk::Chunk, op_code::OpCode, scanner::{ErrorToken, Scanner, Token,
 
 pub type CompileResult = Result<Chunk, ()>;
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
 enum Precedence {
     None,
     Assignment,  // =
@@ -143,8 +143,8 @@ impl Parser {
     }
 }
 
-pub fn compile(source: String) -> CompileResult {
-    let mut compiler = Compiler::new(source);
+pub fn compile(source: String, debug: bool) -> CompileResult {
+    let mut compiler = Compiler::new(source, debug);
     if compiler.compile() {
         Ok(compiler.chunk)
     } else {
@@ -156,13 +156,15 @@ struct Compiler {
     scanner: Scanner,
     parser: Parser,
     chunk: Chunk,
+    debug: bool,
 }
 
 impl Compiler {
-    fn new(source: String) -> Self {
+    fn new(source: String, debug: bool) -> Self {
         Self { scanner: Scanner::new(&source),
                parser: Parser::new(),
                chunk: Chunk::new(),
+               debug,
         }
     }
 
@@ -206,6 +208,10 @@ impl Compiler {
     }
 
     fn binary(&mut self) {
+        if self.debug {
+            println!("binary");
+        }
+
         let operator_type = self.parser.previous.token_type;
         let line = self.parser.previous.line;
         let rule = self.get_rule(operator_type);
@@ -227,8 +233,14 @@ impl Compiler {
     }
 
     fn grouping(&mut self) {
+        if self.debug {
+            println!("grouping");
+        }
         self.expression();
         self.consume(TokenType::RightParen, "expected ')' after expression");
+        if self.debug {
+            println!("grouping end");
+        }
     }
 
     fn unary(&mut self) {
@@ -244,7 +256,12 @@ impl Compiler {
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) {
+        if self.debug {
+            println!("parse {precedence:?}");
+        }
+
         self.advance();
+        // todo: move get_rule to parser for previous and current token
         let prefix_rule = self.get_rule(self.parser.previous.token_type).prefix;
 
         if let Some(prefix_rule) = prefix_rule {
