@@ -20,6 +20,11 @@ impl Chunk {
         );
     }
 
+    pub fn write2(&mut self, code: OpCode, code2: OpCode, line: i32) {
+        self.write(code, line);
+        self.write(code2, line);
+    }
+
     pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {
         for Instruction{code, line} in &self.instructions {
             op.operate(code, *line);

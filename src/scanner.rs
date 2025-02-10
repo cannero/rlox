@@ -95,9 +95,9 @@ impl Scanner {
             '*' => return self.make_token(TokenType::Star),
             '!' => {
                 return if self.match_char('=') {
-                    self.make_token(TokenType::Bang)
-                } else {
                     self.make_token(TokenType::BangEqual)
+                } else {
+                    self.make_token(TokenType::Bang)
                 };
             }
             '=' => {
