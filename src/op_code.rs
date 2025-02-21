@@ -2,6 +2,7 @@
 pub enum OpCode {
     Constant(f32),
     Bool(bool),
+    String(String),
     Equal,
     Greater,
     Less,

@@ -64,6 +64,13 @@ impl Scanner {
         self.source[token.start..token.start+token.length].iter().collect()
     }
 
+    pub fn lexeme_string(&self, token: &Token) -> String {
+        match token.token_type {
+            TokenType::String => self.source[token.start+1..token.start+token.length-1].iter().collect(),
+            _ => panic!("lexeme_string called with {:?}", token.token_type),
+        }
+    }
+
     pub fn scan_token(&mut self) -> ScanResult {
         self.skip_whitespace();
         self.start = self.current;

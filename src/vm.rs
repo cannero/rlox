@@ -1,29 +1,4 @@
-use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode};
-
-#[derive(Clone, Debug)]
-enum Value {
-    Bool(bool),
-    Nil,
-    Number(f32),
-}
-
-impl Value {
-    fn is_number(&self) -> bool {
-        matches!(self, Value::Number(_))
-    }
-}
-
-impl From<bool> for Value {
-    fn from(b: bool) -> Self {
-        Self::Bool(b)
-    }
-}
-
-impl From<f32> for Value {
-    fn from(n: f32) -> Self {
-        Self::Number(n)
-    }
-}
+use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode, value::Value};
 
 pub struct VM {
     ip: usize,
@@ -40,16 +15,16 @@ pub enum InterpretResult {
 
 macro_rules! binary_op {
     ($vm:ident, +) => {{
-        let b = $vm.peek(1);
-        let a = $vm.peek(0);
-        if !a.is_number() || !b.is_number() {
-            $vm.runtime_error("Operands must be numbers");
-            return InterpretResult::RuntimeError;
+        let b = $vm.pop();
+        let a = $vm.pop();
+        match (a,b) {
+            (Value::Number(a), Value::Number(b)) => $vm.push((a + b).into()),
+            (Value::String(a), Value::String(b)) => $vm.push((a + &b).into()),
+            _ => {
+                $vm.runtime_error("Operands must be two numbers or two strings");
+                return Err(InterpretResult::RuntimeError);
+            }
         }
-
-        let b = $vm.pop_number();
-        let a = $vm.pop_number();
-        $vm.push_number(a + b);
     }};
     ($vm:ident, $op:tt) => {{
         let b = $vm.pop();
@@ -58,7 +33,7 @@ macro_rules! binary_op {
             (Value::Number(a), Value::Number(b)) => $vm.push((a $op b).into()),
             _ => {
                 $vm.runtime_error("Operands must be numbers");
-                return InterpretResult::RuntimeError
+                return Err(InterpretResult::RuntimeError);
             }
         }
     }};
@@ -77,22 +52,28 @@ impl VM {
                     let mut debugger = Debugger::new();
                     debugger.disassemble_chunk(&chunk, "code");
                 }
-                self.run(chunk)
+                match self.run(chunk) {
+                    Ok(value) => {
+                        println!("{value:?}");
+                        InterpretResult::Ok
+                    }
+                    Err(res) => res,
+                }
             },
             Err(_) => InterpretResult::CompileError,
         }
     }
 
-    fn run(&mut self, mut chunk: Chunk) -> InterpretResult {
+    fn run(&mut self, mut chunk: Chunk) -> Result<Value, InterpretResult> {
         loop {
             let instr = chunk.read_instruction();
             self.current_line = instr.line;
-            match instr.code {
+            match &instr.code {
                 OpCode::Bool(bool_val) => {
-                    self.push(Value::Bool(bool_val));
+                    self.push(Value::Bool(*bool_val));
                 }
                 OpCode::Constant(x) => {
-                    self.push_number(x);
+                    self.push_number(*x);
                 }
                 OpCode::Add => {
                     binary_op!(self, +);
@@ -114,17 +95,17 @@ impl VM {
                     self.push(Value::Bool(self.is_falsey(val)));
                 }
                 OpCode::Negate => {
-                    if self.peek(0).is_number() {
-                        return InterpretResult::RuntimeError;
+                    if !self.peek(0).is_number() {
+                        self.runtime_error("Operand must be a number");
+                        return Err(InterpretResult::RuntimeError);
                     }
                     let value = self.pop_number();
                     self.push_number(-value);
                 }
                 OpCode::Return => {
                     if let Some(x) = self.stack.pop() {
-                        println!("{x:?}")
+                        return Ok(x);
                     }
-                    return InterpretResult::Ok
                 }
                 OpCode::Equal => {
                     let b = self.pop();
@@ -137,11 +118,13 @@ impl VM {
                 }
                 OpCode::Less => {
                     binary_op!(self, <);
-                },
+                }
+                OpCode::String(string) => {
+                    self.push(Value::String(string.clone()));
+                }
             }
         }
     }
-
 
     fn is_falsey(&self, value: Value) -> bool {
         match value {
@@ -156,6 +139,7 @@ impl VM {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Nil, Value::Nil) => true,
             (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
             _ => false,
         }
     }
@@ -190,3 +174,43 @@ impl VM {
         eprintln!("[line {}] in script", self.current_line); 
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_arithmetic() {
+        let mut vm = VM::new();
+        let mut chunk = Chunk::new();
+        chunk.write2(OpCode::Constant(4.0), OpCode::Negate, 1);
+        chunk.write2(OpCode::Constant(2.0), OpCode::Add, 1);
+        chunk.write2(OpCode::Constant(4.0), OpCode::Negate, 1);
+        chunk.write2(OpCode::Constant(3.0), OpCode::Multiply, 1);
+        chunk.write2(OpCode::Subtract, OpCode::Return, 1);
+        assert_eq!(vm.run(chunk).unwrap(), Value::Number(10.0));
+    }
+
+    #[test]
+    fn test_bool() {
+        let mut vm = VM::new();
+        let mut chunk = Chunk::new();
+        chunk.write2(OpCode::Constant(5.0), OpCode::Constant(4.0), 1);
+        chunk.write2(OpCode::Subtract, OpCode::Constant(3.0), 1);
+        chunk.write2(OpCode::Constant(2.0), OpCode::Multiply, 1);
+        chunk.write2(OpCode::Greater, OpCode::Nil, 1);
+        chunk.write2(OpCode::Not, OpCode::Equal, 1);
+        chunk.write2(OpCode::Not, OpCode::Return, 1);
+        assert_eq!(vm.run(chunk).unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn test_string() {
+        let mut vm = VM::new();
+        let mut chunk = Chunk::new();
+        chunk.write2(OpCode::String("hello".to_string()), OpCode::String("world".to_string()), 1);
+        chunk.write2(OpCode::Add, OpCode::Return, 1);
+        assert_eq!(vm.run(chunk).unwrap(), Value::String("helloworld".to_string()));
+    }
+}
+

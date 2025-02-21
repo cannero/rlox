@@ -84,7 +84,7 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| HashMap
     (TokenType::Less, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
     (TokenType::LessEqual, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
     (TokenType::Identifier, ParseRule::undef()),
-    (TokenType::String, ParseRule::undef()),
+    (TokenType::String, ParseRule::prefix(Compiler::string)),
     (TokenType::Number, ParseRule::prefix(Compiler::number)),
     (TokenType::And, ParseRule::undef()),
     (TokenType::Class, ParseRule::undef()),
@@ -249,6 +249,13 @@ impl Compiler {
             .expect("not a valid number");
         self.chunk.write(OpCode::Constant(num), self.parser.previous.line);
     }
+
+    fn string(&mut self) {
+        // todo: maybe use range in the OpCode, then the vm can get the string
+        // from the compiler.
+        let string = self.scanner.lexeme_string(&self.parser.previous);
+        self.chunk.write(OpCode::String(string), self.parser.previous.line);
+    }        
 
     fn grouping(&mut self) {
         if self.debug {

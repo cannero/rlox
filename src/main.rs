@@ -8,6 +8,7 @@ mod compiler;
 mod debug;
 mod op_code;
 mod scanner;
+mod value;
 mod vm;
 
 fn main() {
