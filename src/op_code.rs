@@ -3,6 +3,10 @@ pub enum OpCode {
     Constant(f32),
     Bool(bool),
     String(String),
+    Pop,
+    GetGlobal(String),
+    DefineGlobal(String),
+    SetGlobal(String),
     Equal,
     Greater,
     Less,
@@ -13,6 +17,7 @@ pub enum OpCode {
     Divide,
     Not,
     Negate,
+    Print,
     Return,
 }
 

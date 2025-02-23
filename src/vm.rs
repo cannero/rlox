@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+
 use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode, value::Value};
 
 pub struct VM {
     ip: usize,
     stack: Vec<Value>,
     current_line: i32,
+    globals: HashMap<String, Value>,
 }
 
 #[derive(Debug)]
@@ -42,7 +45,7 @@ macro_rules! binary_op {
 impl VM {
     
     pub fn new() -> Self {
-        Self { ip: 0, stack: vec![], current_line: 0, }
+        Self { ip: 0, stack: vec![], current_line: 0, globals: HashMap::new(), }
     }
 
     pub fn interpret(&mut self, source: String, debug: bool) -> InterpretResult {
@@ -102,9 +105,37 @@ impl VM {
                     let value = self.pop_number();
                     self.push_number(-value);
                 }
+                OpCode::Print => println!("{:?}\n", self.pop()),
                 OpCode::Return => {
+                    // TODO whole return logic and tests
                     if let Some(x) = self.stack.pop() {
                         return Ok(x);
+                    } else {
+                        return Ok(Value::Nil);
+                    }
+                }
+                OpCode::Pop => _ = self.pop(),
+                OpCode::GetGlobal(name) => {
+                    match self.globals.get(name) {
+                        Some(val) => self.push(val.clone()),
+                        None => {
+                            self.runtime_error(&format!("Undefined variable '{}'.", name));
+                            return Err(InterpretResult::RuntimeError);
+                        }
+                    }
+                }
+                OpCode::DefineGlobal(name) => {
+                    self.globals.insert(name.clone(), self.peek(0));
+                    // todo: check if this is needed:
+                    // pop after insert as gc can resize globals
+                    self.pop();
+                }
+                OpCode::SetGlobal(name) => {
+                    if self.globals.contains_key(name) {
+                        self.globals.insert(name.clone(), self.peek(0));
+                    } else {
+                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        return Err(InterpretResult::RuntimeError);
                     }
                 }
                 OpCode::Equal => {
