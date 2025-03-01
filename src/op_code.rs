@@ -1,9 +1,11 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum OpCode {
     Constant(f32),
     Bool(bool),
     String(String),
     Pop,
+    GetLocal(usize),
+    SetLocal(usize),
     GetGlobal(String),
     DefineGlobal(String),
     SetGlobal(String),

@@ -60,6 +60,7 @@ impl Scanner {
         Self { source: source.chars().collect(), line: 1, start: 0, current: 0 }
     }
 
+    // todo: move the lexeme handling in a separate struct which wraps around the source as Vec<char>
     pub fn lexeme(&self, token: &Token) -> String {
         self.source[token.start..token.start+token.length].iter().collect()
     }
@@ -69,6 +70,14 @@ impl Scanner {
             TokenType::String => self.source[token.start+1..token.start+token.length-1].iter().collect(),
             _ => panic!("lexeme_string called with {:?}", token.token_type),
         }
+    }
+
+    pub fn identifiers_equal(&self, token1: &Token, token2: &Token) -> bool {
+        if token1.length != token2.length {
+            return false;
+        }
+
+        self.lexeme(token1) == self.lexeme(token2)
     }
 
     pub fn scan_token(&mut self) -> ScanResult {

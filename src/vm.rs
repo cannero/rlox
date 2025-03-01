@@ -105,6 +105,8 @@ impl VM {
                 OpCode::Print => println!("{:?}\n", self.pop()),
                 OpCode::Return => return Ok(()),
                 OpCode::Pop => _ = self.pop(),
+                OpCode::GetLocal(slot) => self.push(self.stack[*slot].clone()),
+                OpCode::SetLocal(slot) => self.stack[*slot] = self.peek(0),
                 OpCode::GetGlobal(name) => {
                     match self.globals.get(name) {
                         Some(val) => self.push(val.clone()),
