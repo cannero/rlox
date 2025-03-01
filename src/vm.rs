@@ -56,10 +56,7 @@ impl VM {
                     debugger.disassemble_chunk(&chunk, "code");
                 }
                 match self.run(chunk) {
-                    Ok(value) => {
-                        println!("{value:?}");
-                        InterpretResult::Ok
-                    }
+                    Ok(()) => InterpretResult::Ok,
                     Err(res) => res,
                 }
             },
@@ -67,7 +64,7 @@ impl VM {
         }
     }
 
-    fn run(&mut self, mut chunk: Chunk) -> Result<Value, InterpretResult> {
+    fn run(&mut self, mut chunk: Chunk) -> Result<(), InterpretResult> {
         loop {
             let instr = chunk.read_instruction();
             self.current_line = instr.line;
@@ -106,14 +103,7 @@ impl VM {
                     self.push_number(-value);
                 }
                 OpCode::Print => println!("{:?}\n", self.pop()),
-                OpCode::Return => {
-                    // TODO whole return logic and tests
-                    if let Some(x) = self.stack.pop() {
-                        return Ok(x);
-                    } else {
-                        return Ok(Value::Nil);
-                    }
-                }
+                OpCode::Return => return Ok(()),
                 OpCode::Pop => _ = self.pop(),
                 OpCode::GetGlobal(name) => {
                     match self.globals.get(name) {
@@ -210,16 +200,25 @@ impl VM {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_arithmetic() {
+    fn fill_and_run_vm(opcodes: Vec<OpCode>) -> VM {
         let mut vm = VM::new();
         let mut chunk = Chunk::new();
-        chunk.write2(OpCode::Constant(4.0), OpCode::Negate, 1);
-        chunk.write2(OpCode::Constant(2.0), OpCode::Add, 1);
-        chunk.write2(OpCode::Constant(4.0), OpCode::Negate, 1);
-        chunk.write2(OpCode::Constant(3.0), OpCode::Multiply, 1);
-        chunk.write2(OpCode::Subtract, OpCode::Return, 1);
-        assert_eq!(vm.run(chunk).unwrap(), Value::Number(10.0));
+        for code in opcodes {
+            chunk.write(code, 1);
+        }
+        vm.run(chunk).unwrap();
+        vm
+    }
+
+    #[test]
+    fn test_arithmetic() {
+        let vm = fill_and_run_vm(
+            vec![OpCode::Constant(4.0), OpCode::Negate,
+                 OpCode::Constant(2.0), OpCode::Add,
+                 OpCode::Constant(4.0), OpCode::Negate,
+                 OpCode::Constant(3.0), OpCode::Multiply,
+                 OpCode::Subtract, OpCode::Return]);
+        assert_eq!(vm.stack[0], Value::Number(10.0));
     }
 
     #[test]
@@ -232,7 +231,8 @@ mod tests {
         chunk.write2(OpCode::Greater, OpCode::Nil, 1);
         chunk.write2(OpCode::Not, OpCode::Equal, 1);
         chunk.write2(OpCode::Not, OpCode::Return, 1);
-        assert_eq!(vm.run(chunk).unwrap(), Value::Bool(true));
+        vm.run(chunk).unwrap();
+        assert_eq!(vm.stack[0], Value::Bool(true));
     }
 
     #[test]
@@ -241,7 +241,17 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.write2(OpCode::String("hello".to_string()), OpCode::String("world".to_string()), 1);
         chunk.write2(OpCode::Add, OpCode::Return, 1);
-        assert_eq!(vm.run(chunk).unwrap(), Value::String("helloworld".to_string()));
+        vm.run(chunk).unwrap();
+        assert_eq!(vm.stack[0], Value::String("helloworld".to_string()));
+    }
+
+    #[test]
+    fn test_set_global() {
+        let vm = fill_and_run_vm(
+            vec![OpCode::Nil,  OpCode::DefineGlobal("varx".to_string()),
+                 OpCode::Constant(1.23), OpCode::SetGlobal("varx".to_string()),
+                 OpCode::Return]);
+        assert_eq!(vm.globals.get("varx").unwrap(), &Value::Number(1.23));
     }
 }
 
