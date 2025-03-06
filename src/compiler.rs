@@ -144,7 +144,10 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
         (TokenType::Identifier, ParseRule::prefix(Compiler::variable)),
         (TokenType::String, ParseRule::prefix(Compiler::string)),
         (TokenType::Number, ParseRule::prefix(Compiler::number)),
-        (TokenType::And, ParseRule::undef()),
+        (
+            TokenType::And,
+            ParseRule::infix(Compiler::and, Precedence::And),
+        ),
         (TokenType::Class, ParseRule::undef()),
         (TokenType::Else, ParseRule::undef()),
         (TokenType::False, ParseRule::prefix(Compiler::literal)),
@@ -152,7 +155,10 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
         (TokenType::Fun, ParseRule::undef()),
         (TokenType::If, ParseRule::undef()),
         (TokenType::Nil, ParseRule::prefix(Compiler::literal)),
-        (TokenType::Or, ParseRule::undef()),
+        (
+            TokenType::Or,
+            ParseRule::infix(Compiler::or, Precedence::Or),
+        ),
         (TokenType::Print, ParseRule::undef()),
         (TokenType::Return, ParseRule::undef()),
         (TokenType::Super, ParseRule::undef()),
@@ -289,6 +295,12 @@ impl Compiler {
     fn statement(&mut self) {
         if self.match_it(TokenType::Print) {
             self.print_statement();
+        } else if self.match_it(TokenType::For) {
+            self.for_statement();
+        } else if self.match_it(TokenType::If) {
+            self.if_statement();
+        } else if self.match_it(TokenType::While) {
+            self.while_statement();
         } else if self.match_it(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -337,10 +349,90 @@ impl Compiler {
         self.write(OpCode::Pop);
     }
 
+    fn for_statement(&mut self) {
+        self.begin_scope();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+        if self.match_it(TokenType::Semicolon) {
+            // no initializer
+        } else if self.match_it(TokenType::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.chunk.current_offset();
+        let exit_jump = if self.match_it(TokenType::Semicolon) {
+            None
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+            let exit_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+            self.write(OpCode::Pop);
+            Some(exit_jump)
+        };
+
+        if !self.match_it(TokenType::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump(0));
+            let increment_start = self.chunk.current_offset();
+            self.expression();
+            self.write(OpCode::Pop);
+            self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.write(OpCode::Pop);
+        }
+
+        self.end_scope();
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        self.write(OpCode::Pop);
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump(0));
+
+        self.patch_jump(then_jump);
+        self.write(OpCode::Pop);
+
+        if self.match_it(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
     fn print_statement(&mut self) {
         self.expression();
         self.consume(TokenType::Semicolon, "Expect ';' after value.");
         self.write(OpCode::Print);
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.chunk.current_offset();
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(TokenType::RightParen, "Expect ')' after statement.");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        self.write(OpCode::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.write(OpCode::Pop);
     }
 
     fn consume(&mut self, token_type: TokenType, message: &str) {
@@ -407,6 +499,17 @@ impl Compiler {
             .parse::<f32>()
             .expect("not a valid number");
         self.write(OpCode::Constant(num));
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+        let end_jump = self.emit_jump(OpCode::Jump(0));
+
+        self.patch_jump(else_jump);
+        self.write(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
     }
 
     fn string(&mut self, _can_assign: bool) {
@@ -559,6 +662,15 @@ impl Compiler {
         self.write(OpCode::DefineGlobal(id));
     }
 
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse(0));
+
+        self.write(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+
+        self.patch_jump(end_jump);
+    }
+
     fn declare_variable(&mut self, token: Token) {
         if self.scope_depth == 0 {
             return;
@@ -595,6 +707,20 @@ impl Compiler {
         }
 
         None
+    }
+
+    fn emit_jump(&mut self, code: OpCode) -> usize {
+        let line = self.parser.previous.line;
+        self.chunk.emit_jump(code, line)
+    }
+
+    fn emit_loop(&mut self, offset: usize) {
+        let line = self.parser.previous.line;
+        self.chunk.emit_loop(offset, line);
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        self.chunk.patch_jump(offset);
     }
 
     fn begin_scope(&mut self) {
@@ -735,6 +861,26 @@ mod tests {
             OpCode::GetLocal(1),
             OpCode::Print,
             OpCode::Pop,
+            OpCode::Pop,
+            OpCode::Return,
+        ];
+        let mut chunker = ChunkTester::new(expected);
+        compiler.chunk.operate_on_codes(&mut chunker);
+        chunker.assert();
+    }
+
+    #[test]
+    fn test_if_stmt() {
+        let source = "if (true) { print 1;}".to_string();
+        let mut compiler = Compiler::new(source, false);
+        assert!(compiler.compile());
+        let expected = vec![
+            OpCode::Bool(true),
+            OpCode::JumpIfFalse(4),
+            OpCode::Pop,
+            OpCode::Constant(1.0),
+            OpCode::Print,
+            OpCode::Jump(1),
             OpCode::Pop,
             OpCode::Return,
         ];

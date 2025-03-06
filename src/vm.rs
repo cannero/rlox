@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode, value::Value};
 
 pub struct VM {
-    ip: usize,
     stack: Vec<Value>,
     current_line: i32,
     globals: HashMap<String, Value>,
@@ -45,7 +44,6 @@ macro_rules! binary_op {
 impl VM {
     pub fn new() -> Self {
         Self {
-            ip: 0,
             stack: vec![],
             current_line: 0,
             globals: HashMap::new(),
@@ -70,7 +68,7 @@ impl VM {
 
     fn run(&mut self, mut chunk: Chunk) -> Result<(), InterpretResult> {
         loop {
-            let instr = chunk.read_instruction();
+            let instr = chunk.read_instruction().clone();
             self.current_line = instr.line;
             match &instr.code {
                 OpCode::Bool(bool_val) => {
@@ -107,6 +105,13 @@ impl VM {
                     self.push_number(-value);
                 }
                 OpCode::Print => println!("{:?}\n", self.pop()),
+                OpCode::Jump(offset) => chunk.jump(*offset),
+                OpCode::JumpIfFalse(offset) => {
+                    if self.is_falsey(self.peek(0)) {
+                        chunk.jump(*offset);
+                    }
+                }
+                OpCode::Loop(offset) => chunk.jump_back(*offset),
                 OpCode::Return => return Ok(()),
                 OpCode::Pop => _ = self.pop(),
                 OpCode::GetLocal(slot) => self.push(self.stack[*slot].clone()),

@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OpCode {
     Constant(f32),
     Bool(bool),
@@ -20,9 +20,13 @@ pub enum OpCode {
     Not,
     Negate,
     Print,
+    Jump(usize),
+    JumpIfFalse(usize),
+    Loop(usize),
     Return,
 }
 
+#[derive(Clone)]
 pub struct Instruction {
     pub code: OpCode,
     pub line: i32,
