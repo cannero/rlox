@@ -43,9 +43,13 @@ macro_rules! binary_op {
 }
 
 impl VM {
-    
     pub fn new() -> Self {
-        Self { ip: 0, stack: vec![], current_line: 0, globals: HashMap::new(), }
+        Self {
+            ip: 0,
+            stack: vec![],
+            current_line: 0,
+            globals: HashMap::new(),
+        }
     }
 
     pub fn interpret(&mut self, source: String, debug: bool) -> InterpretResult {
@@ -59,7 +63,7 @@ impl VM {
                     Ok(()) => InterpretResult::Ok,
                     Err(res) => res,
                 }
-            },
+            }
             Err(_) => InterpretResult::CompileError,
         }
     }
@@ -77,7 +81,7 @@ impl VM {
                 }
                 OpCode::Add => {
                     binary_op!(self, +);
-                },
+                }
                 OpCode::Subtract => {
                     binary_op!(self, -);
                 }
@@ -107,15 +111,13 @@ impl VM {
                 OpCode::Pop => _ = self.pop(),
                 OpCode::GetLocal(slot) => self.push(self.stack[*slot].clone()),
                 OpCode::SetLocal(slot) => self.stack[*slot] = self.peek(0),
-                OpCode::GetGlobal(name) => {
-                    match self.globals.get(name) {
-                        Some(val) => self.push(val.clone()),
-                        None => {
-                            self.runtime_error(&format!("Undefined variable '{}'.", name));
-                            return Err(InterpretResult::RuntimeError);
-                        }
+                OpCode::GetGlobal(name) => match self.globals.get(name) {
+                    Some(val) => self.push(val.clone()),
+                    None => {
+                        self.runtime_error(&format!("Undefined variable '{}'.", name));
+                        return Err(InterpretResult::RuntimeError);
                     }
-                }
+                },
                 OpCode::DefineGlobal(name) => {
                     self.globals.insert(name.clone(), self.peek(0));
                     // todo: check if this is needed:
@@ -133,7 +135,7 @@ impl VM {
                 OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
-                    
+
                     self.push(Value::Bool(self.values_equal(a, b)));
                 }
                 OpCode::Greater => {
@@ -193,8 +195,8 @@ impl VM {
 
     fn runtime_error(&self, message: &str) {
         eprintln!("{message}");
-        
-        eprintln!("[line {}] in script", self.current_line); 
+
+        eprintln!("[line {}] in script", self.current_line);
     }
 }
 
@@ -214,12 +216,18 @@ mod tests {
 
     #[test]
     fn test_arithmetic() {
-        let vm = fill_and_run_vm(
-            vec![OpCode::Constant(4.0), OpCode::Negate,
-                 OpCode::Constant(2.0), OpCode::Add,
-                 OpCode::Constant(4.0), OpCode::Negate,
-                 OpCode::Constant(3.0), OpCode::Multiply,
-                 OpCode::Subtract, OpCode::Return]);
+        let vm = fill_and_run_vm(vec![
+            OpCode::Constant(4.0),
+            OpCode::Negate,
+            OpCode::Constant(2.0),
+            OpCode::Add,
+            OpCode::Constant(4.0),
+            OpCode::Negate,
+            OpCode::Constant(3.0),
+            OpCode::Multiply,
+            OpCode::Subtract,
+            OpCode::Return,
+        ]);
         assert_eq!(vm.stack[0], Value::Number(10.0));
     }
 
@@ -241,7 +249,11 @@ mod tests {
     fn test_string() {
         let mut vm = VM::new();
         let mut chunk = Chunk::new();
-        chunk.write2(OpCode::String("hello".to_string()), OpCode::String("world".to_string()), 1);
+        chunk.write2(
+            OpCode::String("hello".to_string()),
+            OpCode::String("world".to_string()),
+            1,
+        );
         chunk.write2(OpCode::Add, OpCode::Return, 1);
         vm.run(chunk).unwrap();
         assert_eq!(vm.stack[0], Value::String("helloworld".to_string()));
@@ -249,11 +261,13 @@ mod tests {
 
     #[test]
     fn test_set_global() {
-        let vm = fill_and_run_vm(
-            vec![OpCode::Nil,  OpCode::DefineGlobal("varx".to_string()),
-                 OpCode::Constant(1.23), OpCode::SetGlobal("varx".to_string()),
-                 OpCode::Return]);
+        let vm = fill_and_run_vm(vec![
+            OpCode::Nil,
+            OpCode::DefineGlobal("varx".to_string()),
+            OpCode::Constant(1.23),
+            OpCode::SetGlobal("varx".to_string()),
+            OpCode::Return,
+        ]);
         assert_eq!(vm.globals.get("varx").unwrap(), &Value::Number(1.23));
     }
 }
-

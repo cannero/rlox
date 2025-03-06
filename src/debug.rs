@@ -1,4 +1,7 @@
-use crate::{chunk::{Chunk, OpCodeVisitor}, op_code::OpCode};
+use crate::{
+    chunk::{Chunk, OpCodeVisitor},
+    op_code::OpCode,
+};
 
 pub struct Debugger {
     last_line: i32,

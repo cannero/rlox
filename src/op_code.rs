@@ -23,7 +23,6 @@ pub enum OpCode {
     Return,
 }
 
-
 pub struct Instruction {
     pub code: OpCode,
     pub line: i32,

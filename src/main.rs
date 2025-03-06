@@ -14,7 +14,9 @@ mod vm;
 fn main() {
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() >= 2 {
-        let debug_switch = arguments.len() >= 3 && (arguments.contains(&"--debug".to_string()) || arguments.contains(&"-d".to_string()));
+        let debug_switch = arguments.len() >= 3
+            && (arguments.contains(&"--debug".to_string())
+                || arguments.contains(&"-d".to_string()));
         run_file(&arguments[arguments.len() - 1], debug_switch);
     } else {
         eprintln!("missing filename");

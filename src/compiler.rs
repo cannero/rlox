@@ -1,21 +1,25 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use crate::{chunk::Chunk, op_code::OpCode, scanner::{ErrorToken, Scanner, Token, TokenType}};
+use crate::{
+    chunk::Chunk,
+    op_code::OpCode,
+    scanner::{ErrorToken, Scanner, Token, TokenType},
+};
 
 pub type CompileResult = Result<Chunk, ()>;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum Precedence {
     None,
-    Assignment,  // =
-    Or,          // or
-    And,         // and
-    Equality,    // == !=
-    Comparison,  // < > <= >=
-    Term,        // + -
-    Factor,      // * /
-    Unary,       // ! -
-    Call,        // . ()
+    Assignment, // =
+    Or,         // or
+    And,        // and
+    Equality,   // == !=
+    Comparison, // < > <= >=
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // ! -
+    Call,       // . ()
     Primary,
 }
 
@@ -47,63 +51,118 @@ struct ParseRule {
 
 impl ParseRule {
     const fn new(prefix: Option<ParseFn>, infix: Option<ParseFn>, precedence: Precedence) -> Self {
-        Self { prefix, infix, precedence, }
+        Self {
+            prefix,
+            infix,
+            precedence,
+        }
     }
 
     const fn infix(infix: ParseFn, precedence: Precedence) -> Self {
-        Self {prefix: None, infix: Some(infix), precedence, }
+        Self {
+            prefix: None,
+            infix: Some(infix),
+            precedence,
+        }
     }
 
     const fn prefix(prefix: ParseFn) -> Self {
-        Self { prefix: Some(prefix), infix: None, precedence: Precedence::None }
+        Self {
+            prefix: Some(prefix),
+            infix: None,
+            precedence: Precedence::None,
+        }
     }
 
     const fn undef() -> Self {
-        Self { prefix: None, infix: None, precedence: Precedence::None, }
+        Self {
+            prefix: None,
+            infix: None,
+            precedence: Precedence::None,
+        }
     }
 }
 
-static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| HashMap::from([
-    (TokenType::LeftParen, ParseRule::new(Some(Compiler::grouping), None, Precedence::None)),
-    (TokenType::RightParen, ParseRule::undef()),
-    (TokenType::LeftBrace, ParseRule::undef()),
-    (TokenType::RightBrace, ParseRule::undef()),
-    (TokenType::Comma, ParseRule::undef()),
-    (TokenType::Dot, ParseRule::undef()),
-    (TokenType::Minus, ParseRule::new(Some(Compiler::unary), Some(Compiler::binary), Precedence::Term)),
-    (TokenType::Plus, ParseRule::infix(Compiler::binary, Precedence::Term)),
-    (TokenType::Semicolon, ParseRule::undef()),
-    (TokenType::Slash, ParseRule::infix(Compiler::binary, Precedence::Factor)),
-    (TokenType::Star, ParseRule::infix(Compiler::binary, Precedence::Factor)),
-    (TokenType::Bang, ParseRule::prefix(Compiler::unary)),
-    (TokenType::BangEqual, ParseRule::infix(Compiler::binary, Precedence::Equality)),
-    (TokenType::Equal, ParseRule::undef()),
-    (TokenType::EqualEqual, ParseRule::infix(Compiler::binary, Precedence::Equality)),
-    (TokenType::Greater, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
-    (TokenType::GreaterEqual, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
-    (TokenType::Less, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
-    (TokenType::LessEqual, ParseRule::infix(Compiler::binary, Precedence::Comparison)),
-    (TokenType::Identifier, ParseRule::prefix(Compiler::variable)),
-    (TokenType::String, ParseRule::prefix(Compiler::string)),
-    (TokenType::Number, ParseRule::prefix(Compiler::number)),
-    (TokenType::And, ParseRule::undef()),
-    (TokenType::Class, ParseRule::undef()),
-    (TokenType::Else, ParseRule::undef()),
-    (TokenType::False, ParseRule::prefix(Compiler::literal)),
-    (TokenType::For, ParseRule::undef()),
-    (TokenType::Fun, ParseRule::undef()),
-    (TokenType::If, ParseRule::undef()),
-    (TokenType::Nil, ParseRule::prefix(Compiler::literal)),
-    (TokenType::Or, ParseRule::undef()),
-    (TokenType::Print, ParseRule::undef()),
-    (TokenType::Return, ParseRule::undef()),
-    (TokenType::Super, ParseRule::undef()),
-    (TokenType::This, ParseRule::undef()),
-    (TokenType::True, ParseRule::prefix(Compiler::literal)),
-    (TokenType::Var, ParseRule::undef()),
-    (TokenType::While, ParseRule::undef()),
-    (TokenType::Eof, ParseRule::undef()),
-]));
+static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
+    HashMap::from([
+        (
+            TokenType::LeftParen,
+            ParseRule::new(Some(Compiler::grouping), None, Precedence::None),
+        ),
+        (TokenType::RightParen, ParseRule::undef()),
+        (TokenType::LeftBrace, ParseRule::undef()),
+        (TokenType::RightBrace, ParseRule::undef()),
+        (TokenType::Comma, ParseRule::undef()),
+        (TokenType::Dot, ParseRule::undef()),
+        (
+            TokenType::Minus,
+            ParseRule::new(
+                Some(Compiler::unary),
+                Some(Compiler::binary),
+                Precedence::Term,
+            ),
+        ),
+        (
+            TokenType::Plus,
+            ParseRule::infix(Compiler::binary, Precedence::Term),
+        ),
+        (TokenType::Semicolon, ParseRule::undef()),
+        (
+            TokenType::Slash,
+            ParseRule::infix(Compiler::binary, Precedence::Factor),
+        ),
+        (
+            TokenType::Star,
+            ParseRule::infix(Compiler::binary, Precedence::Factor),
+        ),
+        (TokenType::Bang, ParseRule::prefix(Compiler::unary)),
+        (
+            TokenType::BangEqual,
+            ParseRule::infix(Compiler::binary, Precedence::Equality),
+        ),
+        (TokenType::Equal, ParseRule::undef()),
+        (
+            TokenType::EqualEqual,
+            ParseRule::infix(Compiler::binary, Precedence::Equality),
+        ),
+        (
+            TokenType::Greater,
+            ParseRule::infix(Compiler::binary, Precedence::Comparison),
+        ),
+        (
+            TokenType::GreaterEqual,
+            ParseRule::infix(Compiler::binary, Precedence::Comparison),
+        ),
+        (
+            TokenType::Less,
+            ParseRule::infix(Compiler::binary, Precedence::Comparison),
+        ),
+        (
+            TokenType::LessEqual,
+            ParseRule::infix(Compiler::binary, Precedence::Comparison),
+        ),
+        (TokenType::Identifier, ParseRule::prefix(Compiler::variable)),
+        (TokenType::String, ParseRule::prefix(Compiler::string)),
+        (TokenType::Number, ParseRule::prefix(Compiler::number)),
+        (TokenType::And, ParseRule::undef()),
+        (TokenType::Class, ParseRule::undef()),
+        (TokenType::Else, ParseRule::undef()),
+        (TokenType::False, ParseRule::prefix(Compiler::literal)),
+        (TokenType::For, ParseRule::undef()),
+        (TokenType::Fun, ParseRule::undef()),
+        (TokenType::If, ParseRule::undef()),
+        (TokenType::Nil, ParseRule::prefix(Compiler::literal)),
+        (TokenType::Or, ParseRule::undef()),
+        (TokenType::Print, ParseRule::undef()),
+        (TokenType::Return, ParseRule::undef()),
+        (TokenType::Super, ParseRule::undef()),
+        (TokenType::This, ParseRule::undef()),
+        (TokenType::True, ParseRule::prefix(Compiler::literal)),
+        (TokenType::Var, ParseRule::undef()),
+        (TokenType::While, ParseRule::undef()),
+        (TokenType::Eof, ParseRule::undef()),
+    ])
+});
 
 fn get_rule(token_type: TokenType) -> &'static ParseRule {
     &RULES.get(&token_type).expect("rule must exist")
@@ -119,8 +178,18 @@ struct Parser {
 impl Parser {
     fn new() -> Self {
         Self {
-            current: Token { token_type: TokenType::Eof, line: 0, start: 0, length: 0 },
-            previous: Token { token_type: TokenType::Eof, line: 0, start: 0, length: 0 },
+            current: Token {
+                token_type: TokenType::Eof,
+                line: 0,
+                start: 0,
+                length: 0,
+            },
+            previous: Token {
+                token_type: TokenType::Eof,
+                line: 0,
+                start: 0,
+                length: 0,
+            },
             had_error: false,
             panic_mode: false,
         }
@@ -173,12 +242,13 @@ struct Compiler {
 
 impl Compiler {
     fn new(source: String, debug: bool) -> Self {
-        Self { scanner: Scanner::new(&source),
-               parser: Parser::new(),
-               chunk: Chunk::new(),
-               locals: Vec::with_capacity(256),
-               scope_depth: 0,
-               debug,
+        Self {
+            scanner: Scanner::new(&source),
+            parser: Parser::new(),
+            chunk: Chunk::new(),
+            locals: Vec::with_capacity(256),
+            scope_depth: 0,
+            debug,
         }
     }
 
@@ -198,7 +268,7 @@ impl Compiler {
                 Ok(token) => {
                     self.parser.set_token(token);
                     break;
-                },
+                }
                 Err(err_token) => self.show_error(err_token, "error during advance"),
             }
         }
@@ -219,7 +289,7 @@ impl Compiler {
     fn statement(&mut self) {
         if self.match_it(TokenType::Print) {
             self.print_statement();
-        } else if self.match_it(TokenType::LeftBrace){
+        } else if self.match_it(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
             self.end_scope();
@@ -249,7 +319,10 @@ impl Compiler {
             self.write(OpCode::Nil);
         }
 
-        self.consume(TokenType::Semicolon, "Expect ';' after variable declaration");
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration",
+        );
 
         if let Some(global) = global {
             self.define_variable(global);
@@ -318,7 +391,7 @@ impl Compiler {
 
     fn literal(&mut self, _can_assign: bool) {
         let token_type = self.parser.previous.token_type;
-        
+
         match token_type {
             TokenType::False => self.write(OpCode::Bool(false)),
             TokenType::Nil => self.write(OpCode::Nil),
@@ -328,7 +401,10 @@ impl Compiler {
     }
 
     fn number(&mut self, _can_assign: bool) {
-        let num = self.scanner.lexeme(&self.parser.previous).parse::<f32>()
+        let num = self
+            .scanner
+            .lexeme(&self.parser.previous)
+            .parse::<f32>()
             .expect("not a valid number");
         self.write(OpCode::Constant(num));
     }
@@ -347,7 +423,7 @@ impl Compiler {
 
     fn named_variable(&mut self, name: String, can_assign: bool) {
         let local_pos = self.resolve_local(&name);
-        
+
         if can_assign && self.match_it(TokenType::Equal) {
             self.expression();
 
@@ -406,7 +482,10 @@ impl Compiler {
 
         while precedence <= self.get_rule(self.parser.current.token_type).precedence {
             self.advance();
-            let infix_rule = self.get_rule(self.parser.previous.token_type).infix.expect("infix must be defined");
+            let infix_rule = self
+                .get_rule(self.parser.previous.token_type)
+                .infix
+                .expect("infix must be defined");
             infix_rule(self, can_assign);
         }
 
@@ -441,9 +520,14 @@ impl Compiler {
             }
 
             match self.parser.current.token_type {
-                TokenType::Class | TokenType::Fun | TokenType::Var |
-                TokenType::For | TokenType::If | TokenType::While |
-                TokenType::Print | TokenType::Return => return,
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => return,
                 _ => (),
             }
 
@@ -480,7 +564,7 @@ impl Compiler {
             return;
         }
 
-        for i in (0..self.locals.len()).rev(){
+        for i in (0..self.locals.len()).rev() {
             let local = &self.locals[i];
             if let Some(depth) = local.depth {
                 if depth < self.scope_depth {
@@ -493,23 +577,20 @@ impl Compiler {
             }
         }
 
-        self.locals.push(
-            Local {
-                name: token,
-                depth: None,
-            }
-        );
+        self.locals.push(Local {
+            name: token,
+            depth: None,
+        });
     }
 
     fn resolve_local(&mut self, name: &str) -> Option<usize> {
         for (i, local) in self.locals.iter().enumerate().rev() {
             let token = &local.name;
-            if token.length == name.len()
-                && self.scanner.lexeme(token) == name {
-                    if local.depth.is_none() {
-                        self.error("Can't read variable in its own initializer");
-                    }
-                    return Some(i);
+            if token.length == name.len() && self.scanner.lexeme(token) == name {
+                if local.depth.is_none() {
+                    self.error("Can't read variable in its own initializer");
+                }
+                return Some(i);
             }
         }
 
@@ -523,12 +604,13 @@ impl Compiler {
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
 
-        while self.locals.len() > 0 &&
-            self.locals[self.locals.len() - 1].depth.is_some() &&
-            self.locals[self.locals.len() - 1].depth.unwrap() > self.scope_depth {
-                self.locals.pop();
-                self.write(OpCode::Pop);
-            }
+        while self.locals.len() > 0
+            && self.locals[self.locals.len() - 1].depth.is_some()
+            && self.locals[self.locals.len() - 1].depth.unwrap() > self.scope_depth
+        {
+            self.locals.pop();
+            self.write(OpCode::Pop);
+        }
     }
 
     fn get_rule(&self, operator_type: TokenType) -> &ParseRule {
@@ -554,7 +636,11 @@ impl Compiler {
         if token.token_type == TokenType::Eof {
             eprint!(" at end");
         } else {
-            eprint!(" at {} ({:?})", self.scanner.get_lexeme(&token), token.token_type);
+            eprint!(
+                " at {} ({:?})",
+                self.scanner.get_lexeme(&token),
+                token.token_type
+            );
         }
 
         eprintln!(": {message}");
@@ -592,7 +678,7 @@ mod tests {
                 current: 0,
             }
         }
-        
+
         fn assert(&self) {
             assert_eq!(self.current, self.expected.len());
         }
@@ -621,9 +707,16 @@ mod tests {
         let source = "{ var a; a=1; print a;}".to_string();
         let mut compiler = Compiler::new(source, false);
         assert!(compiler.compile());
-        let expected = vec![OpCode::Nil, OpCode::Constant(1.0), OpCode::SetLocal(0),
-                            OpCode::Pop, OpCode::GetLocal(0), OpCode::Print,
-                            OpCode::Pop, OpCode::Return];
+        let expected = vec![
+            OpCode::Nil,
+            OpCode::Constant(1.0),
+            OpCode::SetLocal(0),
+            OpCode::Pop,
+            OpCode::GetLocal(0),
+            OpCode::Print,
+            OpCode::Pop,
+            OpCode::Return,
+        ];
         let mut chunker = ChunkTester::new(expected);
         compiler.chunk.operate_on_codes(&mut chunker);
         chunker.assert();
@@ -634,10 +727,17 @@ mod tests {
         let source = "{ var a=1; var b = a + 3;print b;}".to_string();
         let mut compiler = Compiler::new(source, false);
         assert!(compiler.compile());
-        let expected = vec![OpCode::Constant(1.0), OpCode::GetLocal(0),
-                            OpCode::Constant(3.0), OpCode::Add,
-                            OpCode::GetLocal(1), OpCode::Print,
-                            OpCode::Pop, OpCode::Pop, OpCode::Return];
+        let expected = vec![
+            OpCode::Constant(1.0),
+            OpCode::GetLocal(0),
+            OpCode::Constant(3.0),
+            OpCode::Add,
+            OpCode::GetLocal(1),
+            OpCode::Print,
+            OpCode::Pop,
+            OpCode::Pop,
+            OpCode::Return,
+        ];
         let mut chunker = ChunkTester::new(expected);
         compiler.chunk.operate_on_codes(&mut chunker);
         chunker.assert();

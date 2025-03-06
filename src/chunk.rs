@@ -11,13 +11,14 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new() -> Self {
-        Self {instructions: vec![], ip: 0}
+        Self {
+            instructions: vec![],
+            ip: 0,
+        }
     }
 
     pub fn write(&mut self, code: OpCode, line: i32) {
-        self.instructions.push(
-            Instruction { code, line}
-        );
+        self.instructions.push(Instruction { code, line });
     }
 
     pub fn write2(&mut self, code: OpCode, code2: OpCode, line: i32) {
@@ -26,7 +27,7 @@ impl Chunk {
     }
 
     pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {
-        for Instruction{code, line} in &self.instructions {
+        for Instruction { code, line } in &self.instructions {
             op.operate(code, *line);
         }
     }

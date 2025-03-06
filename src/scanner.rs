@@ -1,22 +1,47 @@
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum TokenType {
     // Single-character tokens.
-    LeftParen, RightParen,
-    LeftBrace, RightBrace,
-    Comma, Dot, Minus, Plus,
-    Semicolon, Slash, Star,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Semicolon,
+    Slash,
+    Star,
     // One or two character tokens.
-    Bang, BangEqual,
-    Equal, EqualEqual,
-    Greater, GreaterEqual,
-    Less, LessEqual,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     // Literals.
-    Identifier, String, Number,
+    Identifier,
+    String,
+    Number,
     // Keywords.
-    And, Class, Else, False,
-    For, Fun, If, Nil, Or,
-    Print, Return, Super, This,
-    True, Var, While,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
 
     // handled by extra type: Error,
     Eof,
@@ -57,17 +82,26 @@ pub struct Scanner {
 
 impl Scanner {
     pub fn new(source: &str) -> Self {
-        Self { source: source.chars().collect(), line: 1, start: 0, current: 0 }
+        Self {
+            source: source.chars().collect(),
+            line: 1,
+            start: 0,
+            current: 0,
+        }
     }
 
     // todo: move the lexeme handling in a separate struct which wraps around the source as Vec<char>
     pub fn lexeme(&self, token: &Token) -> String {
-        self.source[token.start..token.start+token.length].iter().collect()
+        self.source[token.start..token.start + token.length]
+            .iter()
+            .collect()
     }
 
     pub fn lexeme_string(&self, token: &Token) -> String {
         match token.token_type {
-            TokenType::String => self.source[token.start+1..token.start+token.length-1].iter().collect(),
+            TokenType::String => self.source[token.start + 1..token.start + token.length - 1]
+                .iter()
+                .collect(),
             _ => panic!("lexeme_string called with {:?}", token.token_type),
         }
     }
@@ -96,7 +130,7 @@ impl Scanner {
         if c.is_ascii_digit() {
             return self.number();
         }
-        
+
         match c {
             '(' => return self.make_token(TokenType::LeftParen),
             ')' => return self.make_token(TokenType::RightParen),
@@ -154,12 +188,12 @@ impl Scanner {
                 self.advance();
             } else if c == '/' {
                 if self.peek_next() == '/' {
-                    while self.peek() != '\n' && !self.is_at_end(){
+                    while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
                     }
                 }
             } else {
-                 break;
+                break;
             }
         }
     }
@@ -205,11 +239,21 @@ impl Scanner {
     }
 
     fn make_token(&self, token_type: TokenType) -> ScanResult {
-        Ok(Token { token_type, line: self.line, start: self.start, length: self.current - self.start })
+        Ok(Token {
+            token_type,
+            line: self.line,
+            start: self.start,
+            length: self.current - self.start,
+        })
     }
 
     fn error_token(&self, message: &str) -> ErrorToken {
-        ErrorToken { message: message.to_string(), line: self.line, start: self.start, length: self.current }
+        ErrorToken {
+            message: message.to_string(),
+            line: self.line,
+            start: self.start,
+            length: self.current,
+        }
     }
 
     fn identifier_type(&self) -> TokenType {
@@ -253,11 +297,15 @@ impl Scanner {
     }
 
     fn check_keyword(&self, start: usize, rest: &str, token_type: TokenType) -> TokenType {
-        if self.current - self.start == start + rest.len() &&
-           self.source[self.start+start..self.current].iter().collect::<String>() == rest {
-               token_type
+        if self.current - self.start == start + rest.len()
+            && self.source[self.start + start..self.current]
+                .iter()
+                .collect::<String>()
+                == rest
+        {
+            token_type
         } else {
-                TokenType::Identifier
+            TokenType::Identifier
         }
     }
 
@@ -304,11 +352,15 @@ impl Scanner {
     }
 
     pub fn get_lexeme(&self, token: &Token) -> String {
-        self.source[token.start..token.start+token.length].iter().collect::<String>()
+        self.source[token.start..token.start + token.length]
+            .iter()
+            .collect::<String>()
     }
 
     pub fn get_lexeme_error(&self, token: &ErrorToken) -> String {
-        self.source[token.start..token.start+token.length].iter().collect::<String>()
+        self.source[token.start..token.start + token.length]
+            .iter()
+            .collect::<String>()
     }
 }
 
@@ -323,12 +375,17 @@ mod tests {
     fn assert_token(result: ScanResult, expected: Token) {
         assert_eq!(result, Ok(expected));
     }
-    
+
     #[test]
     fn test_else_token() {
         let mut target = create("else");
         let res = target.scan_token();
-        let expected = Token { token_type: TokenType::Else, line: 1, start: 0, length: 4 };
+        let expected = Token {
+            token_type: TokenType::Else,
+            line: 1,
+            start: 0,
+            length: 4,
+        };
         assert_token(res, expected);
     }
 
@@ -336,7 +393,12 @@ mod tests {
     fn test_false_token() {
         let mut target = create("false");
         let res = target.scan_token();
-        let expected = Token { token_type: TokenType::False, line: 1, start: 0, length: 5 };
+        let expected = Token {
+            token_type: TokenType::False,
+            line: 1,
+            start: 0,
+            length: 5,
+        };
         assert_token(res, expected);
     }
 
@@ -344,7 +406,12 @@ mod tests {
     fn test_identifier() {
         let mut target = create("falso");
         let res = target.scan_token();
-        let expected = Token { token_type: TokenType::Identifier, line: 1, start: 0, length: 5 };
+        let expected = Token {
+            token_type: TokenType::Identifier,
+            line: 1,
+            start: 0,
+            length: 5,
+        };
         assert_token(res, expected);
     }
 
@@ -352,7 +419,12 @@ mod tests {
     fn test_whitespace() {
         let mut target = create(" ");
         let res = target.scan_token();
-        let expected = Token { token_type: TokenType::Eof, line: 1, start: 1, length: 0 };
+        let expected = Token {
+            token_type: TokenType::Eof,
+            line: 1,
+            start: 1,
+            length: 0,
+        };
         assert_token(res, expected);
     }
 
@@ -360,7 +432,12 @@ mod tests {
     fn test_invalid_input() {
         let mut target = create("\"str");
         let res = target.scan_token();
-        let expected = ErrorToken { message: "Undetermined string".to_string(), line: 1, start: 0, length: 4 };
+        let expected = ErrorToken {
+            message: "Undetermined string".to_string(),
+            line: 1,
+            start: 0,
+            length: 4,
+        };
         assert_eq!(res, Err(expected));
     }
 }
