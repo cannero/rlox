@@ -165,7 +165,7 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
 });
 
 fn get_rule(token_type: TokenType) -> &'static ParseRule {
-    &RULES.get(&token_type).expect("rule must exist")
+    RULES.get(&token_type).expect("rule must exist")
 }
 
 struct Parser {
@@ -604,7 +604,7 @@ impl Compiler {
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
 
-        while self.locals.len() > 0
+        while !self.locals.is_empty()
             && self.locals[self.locals.len() - 1].depth.is_some()
             && self.locals[self.locals.len() - 1].depth.unwrap() > self.scope_depth
         {
