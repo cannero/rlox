@@ -225,7 +225,7 @@ impl Parser {
 pub fn compile(source: String, debug: bool) -> CompileResult {
     let mut compiler = Compiler::new(source, debug);
     if compiler.compile() {
-        Ok(compiler.chunk)
+        Ok(compiler.context.chunk)
     } else {
         Err(())
     }
@@ -237,12 +237,51 @@ struct Local {
     depth: Option<u32>,
 }
 
-struct Compiler {
-    scanner: Scanner,
-    parser: Parser,
+struct CompilerContext {
     chunk: Chunk,
     locals: Vec<Local>,
     scope_depth: u32,
+}
+
+impl CompilerContext {
+    fn new() -> Self {
+        Self {
+            chunk: Chunk::new(),
+            locals: Vec::with_capacity(256),
+            scope_depth: 0,
+        }
+    }
+
+    fn mark_initialized(&mut self) {
+        let pos = self.locals.len() - 1;
+        self.locals[pos].depth = Some(self.scope_depth);
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self, line: i32) {
+        self.scope_depth -= 1;
+
+        while !self.locals.is_empty()
+            && self.locals[self.locals.len() - 1].depth.is_some()
+            && self.locals[self.locals.len() - 1].depth.unwrap() > self.scope_depth
+        {
+            self.locals.pop();
+            self.write(OpCode::Pop, line);
+        }
+    }
+
+    fn write(&mut self, code: OpCode, line: i32) {
+        self.chunk.write(code, line);
+    }
+}
+
+struct Compiler {
+    scanner: Scanner,
+    parser: Parser,
+    context: CompilerContext,
     debug: bool,
 }
 
@@ -251,9 +290,7 @@ impl Compiler {
         Self {
             scanner: Scanner::new(&source),
             parser: Parser::new(),
-            chunk: Chunk::new(),
-            locals: Vec::with_capacity(256),
-            scope_depth: 0,
+            context: CompilerContext::new(),
             debug,
         }
     }
@@ -360,7 +397,7 @@ impl Compiler {
             self.expression_statement();
         }
 
-        let mut loop_start = self.chunk.current_offset();
+        let mut loop_start = self.current_offset();
         let exit_jump = if self.match_it(TokenType::Semicolon) {
             None
         } else {
@@ -373,7 +410,7 @@ impl Compiler {
 
         if !self.match_it(TokenType::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump(0));
-            let increment_start = self.chunk.current_offset();
+            let increment_start = self.current_offset();
             self.expression();
             self.write(OpCode::Pop);
             self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
@@ -421,7 +458,7 @@ impl Compiler {
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.chunk.current_offset();
+        let loop_start = self.current_offset();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
         self.expression();
         self.consume(TokenType::RightParen, "Expect ')' after statement.");
@@ -599,12 +636,20 @@ impl Compiler {
 
     fn write(&mut self, code: OpCode) {
         let line = self.parser.previous.line;
-        self.chunk.write(code, line);
+        self.context.write(code, line);
     }
 
     fn write2(&mut self, code1: OpCode, code2: OpCode) {
         self.write(code1);
         self.write(code2);
+    }
+
+    fn current_offset(&self) -> usize {
+        self.context.chunk.current_offset()
+    }
+
+    fn get_scope_depth(&self) -> u32 {
+        self.context.scope_depth
     }
 
     fn lexeme_string(&self, token: &Token) -> String {
@@ -641,7 +686,7 @@ impl Compiler {
     fn parse_variable(&mut self, error_message: &str) -> Option<String> {
         self.consume(TokenType::Identifier, error_message);
 
-        if self.scope_depth == 0 {
+        if self.get_scope_depth() == 0 {
             Some(self.lexeme(&self.parser.previous))
         } else {
             self.declare_variable(self.parser.previous.clone());
@@ -650,12 +695,11 @@ impl Compiler {
     }
 
     fn mark_initialized(&mut self) {
-        let pos = self.locals.len() - 1;
-        self.locals[pos].depth = Some(self.scope_depth);
+        self.context.mark_initialized();
     }
 
     fn define_variable(&mut self, id: String) {
-        if self.scope_depth > 0 {
+        if self.get_scope_depth() > 0 {
             return;
         }
 
@@ -672,14 +716,14 @@ impl Compiler {
     }
 
     fn declare_variable(&mut self, token: Token) {
-        if self.scope_depth == 0 {
+        if self.get_scope_depth() == 0 {
             return;
         }
 
-        for i in (0..self.locals.len()).rev() {
-            let local = &self.locals[i];
+        for i in (0..self.context.locals.len()).rev() {
+            let local = &self.context.locals[i];
             if let Some(depth) = local.depth {
-                if depth < self.scope_depth {
+                if depth < self.get_scope_depth() {
                     break;
                 }
             }
@@ -689,14 +733,14 @@ impl Compiler {
             }
         }
 
-        self.locals.push(Local {
+        self.context.locals.push(Local {
             name: token,
             depth: None,
         });
     }
 
     fn resolve_local(&mut self, name: &str) -> Option<usize> {
-        for (i, local) in self.locals.iter().enumerate().rev() {
+        for (i, local) in self.context.locals.iter().enumerate().rev() {
             let token = &local.name;
             if token.length == name.len() && self.scanner.lexeme(token) == name {
                 if local.depth.is_none() {
@@ -711,32 +755,25 @@ impl Compiler {
 
     fn emit_jump(&mut self, code: OpCode) -> usize {
         let line = self.parser.previous.line;
-        self.chunk.emit_jump(code, line)
+        self.context.chunk.emit_jump(code, line)
     }
 
     fn emit_loop(&mut self, offset: usize) {
         let line = self.parser.previous.line;
-        self.chunk.emit_loop(offset, line);
+        self.context.chunk.emit_loop(offset, line);
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        self.chunk.patch_jump(offset);
+        self.context.chunk.patch_jump(offset);
     }
 
     fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+        self.context.begin_scope();
     }
 
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-
-        while !self.locals.is_empty()
-            && self.locals[self.locals.len() - 1].depth.is_some()
-            && self.locals[self.locals.len() - 1].depth.unwrap() > self.scope_depth
-        {
-            self.locals.pop();
-            self.write(OpCode::Pop);
-        }
+        let line = self.parser.previous.line;
+        self.context.end_scope(line);
     }
 
     fn get_rule(&self, operator_type: TokenType) -> &ParseRule {
@@ -817,15 +854,19 @@ mod tests {
         }
     }
 
+    fn assert_codes(expected: Vec<OpCode>, compiler: Compiler) {
+        let mut chunker = ChunkTester::new(expected);
+        compiler.context.chunk.operate_on_codes(&mut chunker);
+        chunker.assert();
+    }
+
     #[test]
     fn test_local_var_declaration() {
         let source = "{ var a;}".to_string();
         let mut compiler = Compiler::new(source, false);
         assert!(compiler.compile());
         let expected = vec![OpCode::Nil, OpCode::Pop, OpCode::Return];
-        let mut chunker = ChunkTester::new(expected);
-        compiler.chunk.operate_on_codes(&mut chunker);
-        chunker.assert();
+        assert_codes(expected, compiler);
     }
 
     #[test]
@@ -843,9 +884,7 @@ mod tests {
             OpCode::Pop,
             OpCode::Return,
         ];
-        let mut chunker = ChunkTester::new(expected);
-        compiler.chunk.operate_on_codes(&mut chunker);
-        chunker.assert();
+        assert_codes(expected, compiler);
     }
 
     #[test]
@@ -864,9 +903,7 @@ mod tests {
             OpCode::Pop,
             OpCode::Return,
         ];
-        let mut chunker = ChunkTester::new(expected);
-        compiler.chunk.operate_on_codes(&mut chunker);
-        chunker.assert();
+        assert_codes(expected, compiler);
     }
 
     #[test]
@@ -884,8 +921,6 @@ mod tests {
             OpCode::Pop,
             OpCode::Return,
         ];
-        let mut chunker = ChunkTester::new(expected);
-        compiler.chunk.operate_on_codes(&mut chunker);
-        chunker.assert();
+        assert_codes(expected, compiler);
     }
 }
