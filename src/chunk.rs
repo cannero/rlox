@@ -4,6 +4,7 @@ pub trait OpCodeVisitor {
     fn operate(&mut self, code: &OpCode, line: i32);
 }
 
+#[derive(PartialEq)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
     ip: usize,
@@ -19,12 +20,6 @@ impl Chunk {
 
     pub fn write(&mut self, code: OpCode, line: i32) {
         self.instructions.push(Instruction { code, line });
-    }
-
-    #[cfg(test)]
-    pub fn write2(&mut self, code: OpCode, code2: OpCode, line: i32) {
-        self.write(code, line);
-        self.write(code2, line);
     }
 
     pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {

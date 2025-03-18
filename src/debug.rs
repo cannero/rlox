@@ -1,6 +1,6 @@
 use crate::{
-    chunk::{Chunk, OpCodeVisitor},
-    op_code::OpCode,
+    chunk::OpCodeVisitor,
+    op_code::OpCode, value::Function,
 };
 
 pub struct Debugger {
@@ -12,10 +12,10 @@ impl Debugger {
         Self { last_line: 0 }
     }
 
-    pub fn disassemble_chunk(&mut self, chunk: &Chunk, name: &str) {
+    pub fn disassemble_chunk(&mut self, function: &Function, name: &str) {
         println!("== {} ==", name);
 
-        chunk.operate_on_codes(self);
+        function.operate_on_codes(self);
     }
 }
 

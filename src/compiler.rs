@@ -1,12 +1,11 @@
 use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{
-    chunk::Chunk,
     op_code::OpCode,
-    scanner::{ErrorToken, Scanner, Token, TokenType},
+    scanner::{ErrorToken, Scanner, Token, TokenType}, value::Function,
 };
 
-pub type CompileResult = Result<Chunk, ()>;
+pub type CompileResult = Result<Function, ()>;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum Precedence {
@@ -225,7 +224,7 @@ impl Parser {
 pub fn compile(source: String, debug: bool) -> CompileResult {
     let mut compiler = Compiler::new(source, debug);
     if compiler.compile() {
-        Ok(compiler.context.chunk)
+        Ok(compiler.context.function)
     } else {
         Err(())
     }
@@ -237,22 +236,31 @@ struct Local {
     depth: Option<u32>,
 }
 
+enum FunctionType {
+    Function,
+    Script,
+}
+
 struct CompilerContext {
-    chunk: Chunk,
+    function: Function,
     locals: Vec<Local>,
     scope_depth: u32,
 }
 
 impl CompilerContext {
-    fn new() -> Self {
+    fn new(function_name: String) -> Self {
         Self {
-            chunk: Chunk::new(),
+            function: Function::new(function_name),
             locals: Vec::with_capacity(256),
             scope_depth: 0,
         }
     }
 
     fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+
         let pos = self.locals.len() - 1;
         self.locals[pos].depth = Some(self.scope_depth);
     }
@@ -274,7 +282,23 @@ impl CompilerContext {
     }
 
     fn write(&mut self, code: OpCode, line: i32) {
-        self.chunk.write(code, line);
+        self.function.write(code, line);
+    }
+
+    fn current_offset(&self) -> usize {
+        self.function.current_offset()
+    }
+
+    fn emit_jump(&mut self, code: OpCode, line: i32) -> usize {
+        self.function.emit_jump(code, line)
+    }
+
+    fn emit_loop(&mut self, offset: usize, line: i32) {
+        self.function.emit_loop(offset, line);
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        self.function.patch_jump(offset);
     }
 }
 
@@ -290,7 +314,7 @@ impl Compiler {
         Self {
             scanner: Scanner::new(&source),
             parser: Parser::new(),
-            context: CompilerContext::new(),
+            context: CompilerContext::new("".to_string()),
             debug,
         }
     }
@@ -318,7 +342,9 @@ impl Compiler {
     }
 
     fn declaration(&mut self) {
-        if self.match_it(TokenType::Var) {
+        if self.match_it(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.match_it(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -356,7 +382,41 @@ impl Compiler {
             self.declaration();
         }
 
-        self.consume(TokenType::RightBrace, "Expect '}' after block");
+        self.consume(TokenType::RightBrace, "Expect '}' after block.");
+    }
+
+    fn function(&mut self, function_type: FunctionType) {
+        let function_name = self.scanner.lexeme(&self.parser.previous);
+        let new_context = CompilerContext::new(function_name);
+        // todo: where is enclosing used
+        let enclosing = std::mem::replace(&mut self.context, new_context);
+        self.consume(
+            TokenType::LeftParen,
+            "Expect '(' after function name.",
+        );
+        self.consume(
+            TokenType::RightParen,
+            "Expect ')' after parameters.",
+        );
+        self.consume(
+            TokenType::LeftBrace,
+            "Expect '{' before function body.",
+        );
+
+        self.block();
+
+        let function_context = std::mem::replace(&mut self.context, enclosing);
+        // create function op with chunk from function_context
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name.");
+        self.mark_initialized();
+        self.function(FunctionType::Function);
+
+        if let Some(global) = global {
+            self.define_variable(global);
+        }
     }
 
     fn var_declaration(&mut self) {
@@ -370,7 +430,7 @@ impl Compiler {
 
         self.consume(
             TokenType::Semicolon,
-            "Expect ';' after variable declaration",
+            "Expect ';' after variable declaration.",
         );
 
         if let Some(global) = global {
@@ -645,7 +705,7 @@ impl Compiler {
     }
 
     fn current_offset(&self) -> usize {
-        self.context.chunk.current_offset()
+        self.context.current_offset()
     }
 
     fn get_scope_depth(&self) -> u32 {
@@ -755,16 +815,16 @@ impl Compiler {
 
     fn emit_jump(&mut self, code: OpCode) -> usize {
         let line = self.parser.previous.line;
-        self.context.chunk.emit_jump(code, line)
+        self.context.emit_jump(code, line)
     }
 
     fn emit_loop(&mut self, offset: usize) {
         let line = self.parser.previous.line;
-        self.context.chunk.emit_loop(offset, line);
+        self.context.emit_loop(offset, line);
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        self.context.chunk.patch_jump(offset);
+        self.context.patch_jump(offset);
     }
 
     fn begin_scope(&mut self) {
@@ -856,7 +916,7 @@ mod tests {
 
     fn assert_codes(expected: Vec<OpCode>, compiler: Compiler) {
         let mut chunker = ChunkTester::new(expected);
-        compiler.context.chunk.operate_on_codes(&mut chunker);
+        compiler.context.function.operate_on_codes(&mut chunker);
         chunker.assert();
     }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{chunk::Chunk, compiler::compile, debug::Debugger, op_code::OpCode, value::Value};
+use crate::{compiler::compile, debug::Debugger, op_code::OpCode, value::{Function, Value}};
 
 pub struct VM {
     stack: Vec<Value>,
@@ -52,12 +52,12 @@ impl VM {
 
     pub fn interpret(&mut self, source: String, debug: bool) -> InterpretResult {
         match compile(source, debug) {
-            Ok(chunk) => {
+            Ok(function) => {
                 if debug {
                     let mut debugger = Debugger::new();
-                    debugger.disassemble_chunk(&chunk, "code");
+                    debugger.disassemble_chunk(&function, "code");
                 }
-                match self.run(chunk) {
+                match self.run(function) {
                     Ok(()) => InterpretResult::Ok,
                     Err(res) => res,
                 }
@@ -66,9 +66,9 @@ impl VM {
         }
     }
 
-    fn run(&mut self, mut chunk: Chunk) -> Result<(), InterpretResult> {
+    fn run(&mut self, mut function: Function) -> Result<(), InterpretResult> {
         loop {
-            let instr = chunk.read_instruction().clone();
+            let instr = function.read_instruction().clone();
             self.current_line = instr.line;
             match &instr.code {
                 OpCode::Bool(bool_val) => {
@@ -105,13 +105,13 @@ impl VM {
                     self.push_number(-value);
                 }
                 OpCode::Print => println!("{:?}\n", self.pop()),
-                OpCode::Jump(offset) => chunk.jump(*offset),
+                OpCode::Jump(offset) => function.jump(*offset),
                 OpCode::JumpIfFalse(offset) => {
                     if self.is_falsey(self.peek(0)) {
-                        chunk.jump(*offset);
+                        function.jump(*offset);
                     }
                 }
-                OpCode::Loop(offset) => chunk.jump_back(*offset),
+                OpCode::Loop(offset) => function.jump_back(*offset),
                 OpCode::Return => return Ok(()),
                 OpCode::Pop => _ = self.pop(),
                 OpCode::GetLocal(slot) => self.push(self.stack[*slot].clone()),
@@ -207,6 +207,8 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
+    use crate::chunk::Chunk;
+
     use super::*;
 
     fn fill_and_run_vm(opcodes: Vec<OpCode>) -> VM {
@@ -215,7 +217,8 @@ mod tests {
         for code in opcodes {
             chunk.write(code, 1);
         }
-        vm.run(chunk).unwrap();
+        let function = Function::new_from_chunk("test".to_string(), chunk);
+        vm.run(function).unwrap();
         vm
     }
 
@@ -238,29 +241,24 @@ mod tests {
 
     #[test]
     fn test_bool() {
-        let mut vm = VM::new();
-        let mut chunk = Chunk::new();
-        chunk.write2(OpCode::Constant(5.0), OpCode::Constant(4.0), 1);
-        chunk.write2(OpCode::Subtract, OpCode::Constant(3.0), 1);
-        chunk.write2(OpCode::Constant(2.0), OpCode::Multiply, 1);
-        chunk.write2(OpCode::Greater, OpCode::Nil, 1);
-        chunk.write2(OpCode::Not, OpCode::Equal, 1);
-        chunk.write2(OpCode::Not, OpCode::Return, 1);
-        vm.run(chunk).unwrap();
+        let vm = fill_and_run_vm(vec![
+            OpCode::Constant(5.0), OpCode::Constant(4.0),
+            OpCode::Subtract, OpCode::Constant(3.0),
+            OpCode::Constant(2.0), OpCode::Multiply,
+            OpCode::Greater, OpCode::Nil,
+            OpCode::Not, OpCode::Equal,
+            OpCode::Not, OpCode::Return,]);
         assert_eq!(vm.stack[0], Value::Bool(true));
     }
 
     #[test]
     fn test_string() {
-        let mut vm = VM::new();
-        let mut chunk = Chunk::new();
-        chunk.write2(
+        let vm = fill_and_run_vm(vec![
             OpCode::String("hello".to_string()),
             OpCode::String("world".to_string()),
-            1,
-        );
-        chunk.write2(OpCode::Add, OpCode::Return, 1);
-        vm.run(chunk).unwrap();
+            OpCode::Add,
+            OpCode::Return,
+        ]);
         assert_eq!(vm.stack[0], Value::String("helloworld".to_string()));
     }
 

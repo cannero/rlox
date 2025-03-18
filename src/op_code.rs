@@ -26,7 +26,7 @@ pub enum OpCode {
     Return,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Instruction {
     pub code: OpCode,
     pub line: i32,
