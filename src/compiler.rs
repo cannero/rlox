@@ -610,8 +610,6 @@ impl Compiler {
     }
 
     fn string(&mut self, _can_assign: bool) {
-        // todo: maybe use range in the OpCode, then the vm can get the string
-        // from the compiler.
         let string = self.lexeme_string(&self.parser.previous);
         self.write(OpCode::String(string));
     }

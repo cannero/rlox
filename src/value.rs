@@ -78,16 +78,8 @@ impl Function {
         self.chunk.patch_jump(offset);
     }
 
-    pub fn jump(&mut self, offset: usize) {
-        self.chunk.jump(offset);
-    }
-
-    pub fn jump_back(&mut self, offset: usize) {
-        self.chunk.jump_back(offset);
-    }
-
-    pub fn read_instruction(&mut self) -> &Instruction {
-        self.chunk.read_instruction()
+    pub fn read_instruction(&mut self, ip: usize) -> &Instruction {
+        self.chunk.read_instruction(ip)
     }
 
     pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {

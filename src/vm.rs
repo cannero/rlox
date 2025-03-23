@@ -2,10 +2,38 @@ use std::collections::HashMap;
 
 use crate::{compiler::compile, debug::Debugger, op_code::OpCode, value::{Function, Value}};
 
+struct CallFrame {
+    //slots: Vec<Value>,
+    function: Function,
+    ip: usize,
+}
+
+impl CallFrame {
+    fn new(function: Function) -> Self {
+        Self {
+            function,
+            ip: 0,
+        }
+    }
+
+    fn increase_ip(&mut self) {
+        self.ip += 1;
+    }
+
+    fn jump(&mut self, offset: usize) {
+        self.ip += offset;
+    }
+
+    pub fn jump_back(&mut self, offset: usize) {
+        self.ip -= offset;
+    }
+}
+
 pub struct VM {
     stack: Vec<Value>,
     current_line: i32,
     globals: HashMap<String, Value>,
+    frames: Vec<CallFrame>,
 }
 
 #[derive(Debug)]
@@ -47,6 +75,7 @@ impl VM {
             stack: vec![],
             current_line: 0,
             globals: HashMap::new(),
+            frames: vec![],
         }
     }
 
@@ -57,7 +86,10 @@ impl VM {
                     let mut debugger = Debugger::new();
                     debugger.disassemble_chunk(&function, "code");
                 }
-                match self.run(function) {
+
+                let frame = CallFrame::new(function);
+                self.frames.push(frame);
+                match self.run() {
                     Ok(()) => InterpretResult::Ok,
                     Err(res) => res,
                 }
@@ -66,9 +98,13 @@ impl VM {
         }
     }
 
-    fn run(&mut self, mut function: Function) -> Result<(), InterpretResult> {
+    fn run(&mut self) -> Result<(), InterpretResult> {
         loop {
-            let instr = function.read_instruction().clone();
+            let frame = self.current_frame();
+            let ip = frame.ip;
+            frame.increase_ip();
+
+            let instr = frame.function.read_instruction(ip).clone();
             self.current_line = instr.line;
             match &instr.code {
                 OpCode::Bool(bool_val) => {
@@ -105,13 +141,13 @@ impl VM {
                     self.push_number(-value);
                 }
                 OpCode::Print => println!("{:?}\n", self.pop()),
-                OpCode::Jump(offset) => function.jump(*offset),
+                OpCode::Jump(offset) => self.current_frame().jump(*offset),
                 OpCode::JumpIfFalse(offset) => {
                     if self.is_falsey(self.peek(0)) {
-                        function.jump(*offset);
+                        self.current_frame().jump(*offset);
                     }
                 }
-                OpCode::Loop(offset) => function.jump_back(*offset),
+                OpCode::Loop(offset) => self.current_frame().jump_back(*offset),
                 OpCode::Return => return Ok(()),
                 OpCode::Pop => _ = self.pop(),
                 OpCode::GetLocal(slot) => self.push(self.stack[*slot].clone()),
@@ -198,6 +234,10 @@ impl VM {
         self.stack.push(Value::Number(value));
     }
 
+    fn current_frame(&mut self) -> &mut CallFrame {
+        self.frames.last_mut().expect("frames cannot be empty")
+    }
+
     fn runtime_error(&self, message: &str) {
         eprintln!("{message}");
 
@@ -218,7 +258,8 @@ mod tests {
             chunk.write(code, 1);
         }
         let function = Function::new_from_chunk("test".to_string(), chunk);
-        vm.run(function).unwrap();
+        vm.frames.push(CallFrame::new(function));
+        vm.run().unwrap();
         vm
     }
 

@@ -7,14 +7,12 @@ pub trait OpCodeVisitor {
 #[derive(PartialEq)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
-    ip: usize,
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self {
             instructions: vec![],
-            ip: 0,
         }
     }
 
@@ -28,10 +26,8 @@ impl Chunk {
         }
     }
 
-    pub fn read_instruction(&mut self) -> &Instruction {
-        let instr = &self.instructions[self.ip];
-        self.ip += 1;
-        instr
+    pub fn read_instruction(&self, ip: usize) -> &Instruction {
+        &self.instructions[ip]
     }
 
     pub fn emit_jump(&mut self, code: OpCode, line: i32) -> usize {
@@ -61,15 +57,6 @@ impl Chunk {
         };
 
         self.instructions[offset] = new_instruction;
-    }
-
-    pub fn jump(&mut self, offset: usize) {
-        self.ip += offset;
-    }
-
-    pub fn jump_back(&mut self, offset: usize) {
-        println!("jumping from {} back {}", self.ip, offset);
-        self.ip -= offset;
     }
 
     pub fn current_offset(&self) -> usize {
