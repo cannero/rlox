@@ -1,12 +1,18 @@
 use crate::{chunk::{Chunk, OpCodeVisitor}, op_code::{Instruction, OpCode}};
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum NativeFunction {
+    Clock,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Bool(bool),
     Nil,
-    Number(f32),
+    Number(f64),
     String(String),
-//    Function(Function),
+    Function(Function),
+    Native(NativeFunction, usize),
 }
 
 impl Value {
@@ -21,8 +27,8 @@ impl From<bool> for Value {
     }
 }
 
-impl From<f32> for Value {
-    fn from(n: f32) -> Self {
+impl From<f64> for Value {
+    fn from(n: f64) -> Self {
         Self::Number(n)
     }
 }
@@ -33,7 +39,7 @@ impl From<String> for Value {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     arity: usize,
     name: String,
@@ -84,5 +90,18 @@ impl Function {
 
     pub fn operate_on_codes(&self, op: &mut dyn OpCodeVisitor) {
         self.chunk.operate_on_codes(op);
+    }
+
+    pub fn arity(&self) -> usize {
+        self.arity
+    }
+
+    pub fn increase_arity(&mut self) {
+        self.arity += 1;
+    }
+
+    #[allow(dead_code)]
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }

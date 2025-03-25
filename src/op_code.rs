@@ -1,8 +1,11 @@
+use crate::value::Function;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpCode {
-    Constant(f32),
+    Constant(f64),
     Bool(bool),
     String(String),
+    Function(Function),
     Pop,
     GetLocal(usize),
     SetLocal(usize),
@@ -23,10 +26,11 @@ pub enum OpCode {
     Jump(usize),
     JumpIfFalse(usize),
     Loop(usize),
+    Call(usize),
     Return,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Instruction {
     pub code: OpCode,
     pub line: i32,

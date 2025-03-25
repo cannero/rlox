@@ -49,10 +49,10 @@ struct ParseRule {
 }
 
 impl ParseRule {
-    const fn new(prefix: Option<ParseFn>, infix: Option<ParseFn>, precedence: Precedence) -> Self {
+    const fn new(prefix: ParseFn, infix: ParseFn, precedence: Precedence) -> Self {
         Self {
-            prefix,
-            infix,
+            prefix: Some(prefix),
+            infix: Some(infix),
             precedence,
         }
     }
@@ -86,7 +86,7 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
     HashMap::from([
         (
             TokenType::LeftParen,
-            ParseRule::new(Some(Compiler::grouping), None, Precedence::None),
+            ParseRule::new(Compiler::grouping, Compiler::call, Precedence::Call),
         ),
         (TokenType::RightParen, ParseRule::undef()),
         (TokenType::LeftBrace, ParseRule::undef()),
@@ -96,8 +96,8 @@ static RULES: LazyLock<HashMap<TokenType, ParseRule>> = LazyLock::new(|| {
         (
             TokenType::Minus,
             ParseRule::new(
-                Some(Compiler::unary),
-                Some(Compiler::binary),
+                Compiler::unary,
+                Compiler::binary,
                 Precedence::Term,
             ),
         ),
@@ -216,7 +216,7 @@ impl Parser {
         self.panic_mode = false;
     }
 
-    fn matches(&self, token_type: TokenType) -> bool {
+    fn check(&self, token_type: TokenType) -> bool {
         self.current.token_type == token_type
     }
 }
@@ -234,11 +234,6 @@ struct Local {
     name: Token,
     // The depth is set after the variable is initialized.
     depth: Option<u32>,
-}
-
-enum FunctionType {
-    Function,
-    Script,
 }
 
 struct CompilerContext {
@@ -279,6 +274,10 @@ impl CompilerContext {
             self.locals.pop();
             self.write(OpCode::Pop, line);
         }
+    }
+
+    fn end_function_scope(&mut self) {
+        self.scope_depth -= 1;
     }
 
     fn write(&mut self, code: OpCode, line: i32) {
@@ -362,6 +361,8 @@ impl Compiler {
             self.for_statement();
         } else if self.match_it(TokenType::If) {
             self.if_statement();
+        } else if self.match_it(TokenType::Return) {
+            self.return_statement();
         } else if self.match_it(TokenType::While) {
             self.while_statement();
         } else if self.match_it(TokenType::LeftBrace) {
@@ -378,22 +379,35 @@ impl Compiler {
     }
 
     fn block(&mut self) {
-        while !self.parser.matches(TokenType::RightBrace) && !self.parser.matches(TokenType::Eof) {
+        while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
             self.declaration();
         }
 
         self.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
-    fn function(&mut self, function_type: FunctionType) {
+    fn function(&mut self) {
         let function_name = self.scanner.lexeme(&self.parser.previous);
         let new_context = CompilerContext::new(function_name);
         // todo: where is enclosing used
         let enclosing = std::mem::replace(&mut self.context, new_context);
+        self.begin_scope();
         self.consume(
             TokenType::LeftParen,
             "Expect '(' after function name.",
         );
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.context.function.increase_arity();
+                let expected_none = self.parse_variable("Expected parameter name.");
+                self.define_variable(expected_none);
+                if !self.match_it(TokenType::Comma){
+                    break;
+                }
+            }
+        }
+        
         self.consume(
             TokenType::RightParen,
             "Expect ')' after parameters.",
@@ -404,19 +418,19 @@ impl Compiler {
         );
 
         self.block();
+        self.context.end_function_scope();
+        self.end_compiler();
 
         let function_context = std::mem::replace(&mut self.context, enclosing);
-        // create function op with chunk from function_context
+        self.write(OpCode::Function(function_context.function));
     }
 
     fn fun_declaration(&mut self) {
         let global = self.parse_variable("Expect function name.");
         self.mark_initialized();
-        self.function(FunctionType::Function);
+        self.function();
 
-        if let Some(global) = global {
-            self.define_variable(global);
-        }
+        self.define_variable(global);
     }
 
     fn var_declaration(&mut self) {
@@ -433,11 +447,7 @@ impl Compiler {
             "Expect ';' after variable declaration.",
         );
 
-        if let Some(global) = global {
-            self.define_variable(global);
-        } else {
-            self.mark_initialized();
-        }
+        self.define_variable(global);
     }
 
     fn expression_statement(&mut self) {
@@ -517,6 +527,16 @@ impl Compiler {
         self.write(OpCode::Print);
     }
 
+    fn return_statement(&mut self) {
+        if self.match_it(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenType::Semicolon, "Expect ';' after return value.");
+            self.write(OpCode::Return);
+        }
+    }
+
     fn while_statement(&mut self) {
         let loop_start = self.current_offset();
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
@@ -532,8 +552,9 @@ impl Compiler {
         self.write(OpCode::Pop);
     }
 
+    /// Consume the token or create an error.
     fn consume(&mut self, token_type: TokenType, message: &str) {
-        if self.parser.matches(token_type) {
+        if self.check(token_type) {
             self.advance();
             return;
         }
@@ -541,8 +562,13 @@ impl Compiler {
         self.error_at_current(message);
     }
 
+    fn check(&self, token_type: TokenType) -> bool {
+        self.parser.check(token_type)
+    }
+
+    /// If the token matches, consume it.
     fn match_it(&mut self, token_type: TokenType) -> bool {
-        if !self.parser.matches(token_type) {
+        if !self.check(token_type) {
             return false;
         }
 
@@ -551,6 +577,11 @@ impl Compiler {
     }
 
     fn end_compiler(&mut self) {
+        self.emit_return();
+    }
+
+    fn emit_return(&mut self) {
+        self.write(OpCode::Nil);
         self.write(OpCode::Return);
     }
 
@@ -578,6 +609,11 @@ impl Compiler {
         }
     }
 
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
+        self.write(OpCode::Call(arg_count));
+    }
+
     fn literal(&mut self, _can_assign: bool) {
         let token_type = self.parser.previous.token_type;
 
@@ -593,7 +629,7 @@ impl Compiler {
         let num = self
             .scanner
             .lexeme(&self.parser.previous)
-            .parse::<f32>()
+            .parse::<f64>()
             .expect("not a valid number");
         self.write(OpCode::Constant(num));
     }
@@ -756,12 +792,40 @@ impl Compiler {
         self.context.mark_initialized();
     }
 
-    fn define_variable(&mut self, id: String) {
-        if self.get_scope_depth() > 0 {
-            return;
+    fn define_variable(&mut self, id: Option<String>) {
+        match id {
+            Some(id) => {
+                if self.get_scope_depth() > 0 {
+                    self.error("Global variable but scope depth is > 0");
+                }
+
+                self.write(OpCode::DefineGlobal(id))
+            },
+            None => {
+                if self.get_scope_depth() == 0 {
+                    self.error("Local variable but scope depth is 0");
+                }
+
+                self.mark_initialized();
+            }
+        }
+    }
+
+    fn argument_list(&mut self) -> usize {
+        let mut arg_count = 0;
+        if !self.check(TokenType::RightParen) {
+            loop {
+                self.expression();
+                arg_count += 1;
+                if !self.match_it(TokenType::Comma){
+                    break;
+                }
+            }
         }
 
-        self.write(OpCode::DefineGlobal(id));
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.");
+
+        arg_count
     }
 
     fn and(&mut self, _can_assign: bool) {
@@ -923,7 +987,7 @@ mod tests {
         let source = "{ var a;}".to_string();
         let mut compiler = Compiler::new(source, false);
         assert!(compiler.compile());
-        let expected = vec![OpCode::Nil, OpCode::Pop, OpCode::Return];
+        let expected = vec![OpCode::Nil, OpCode::Pop, OpCode::Nil, OpCode::Return];
         assert_codes(expected, compiler);
     }
 
@@ -940,6 +1004,7 @@ mod tests {
             OpCode::GetLocal(0),
             OpCode::Print,
             OpCode::Pop,
+            OpCode::Nil,
             OpCode::Return,
         ];
         assert_codes(expected, compiler);
@@ -959,6 +1024,7 @@ mod tests {
             OpCode::Print,
             OpCode::Pop,
             OpCode::Pop,
+            OpCode::Nil,
             OpCode::Return,
         ];
         assert_codes(expected, compiler);
@@ -977,6 +1043,7 @@ mod tests {
             OpCode::Print,
             OpCode::Jump(1),
             OpCode::Pop,
+            OpCode::Nil,
             OpCode::Return,
         ];
         assert_codes(expected, compiler);

@@ -4,7 +4,7 @@ pub trait OpCodeVisitor {
     fn operate(&mut self, code: &OpCode, line: i32);
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
 }
