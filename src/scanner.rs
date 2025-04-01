@@ -191,9 +191,11 @@ impl Scanner {
                     while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
                     }
+                } else {
+                    return;
                 }
             } else {
-                break;
+                return;
             }
         }
     }
@@ -376,6 +378,11 @@ mod tests {
         assert_eq!(result, Ok(expected));
     }
 
+    fn assert_token_type(target: &mut Scanner, expected: TokenType) {
+        let result = target.scan_token();
+        assert_eq!(result.unwrap().token_type, expected);
+    }
+
     #[test]
     fn test_else_token() {
         let mut target = create("else");
@@ -439,5 +446,15 @@ mod tests {
             length: 4,
         };
         assert_eq!(res, Err(expected));
+    }
+
+    #[test]
+    fn test_division() {
+        let mut target = create("a = 6 / 3");
+        assert_token_type(&mut target, TokenType::Identifier);
+        assert_token_type(&mut target, TokenType::Equal);
+        assert_token_type(&mut target, TokenType::Number);
+        assert_token_type(&mut target, TokenType::Slash);
+        assert_token_type(&mut target, TokenType::Number);
     }
 }

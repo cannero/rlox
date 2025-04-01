@@ -715,11 +715,13 @@ impl Compiler {
         }
 
         while precedence <= self.get_rule(self.parser.current.token_type).precedence {
+
             self.advance();
             let infix_rule = self
                 .get_rule(self.parser.previous.token_type)
                 .infix
                 .expect("infix must be defined");
+
             infix_rule(self, can_assign);
         }
 
