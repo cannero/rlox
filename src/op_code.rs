@@ -1,6 +1,8 @@
+use serde::{Serialize, Deserialize};
+
 use crate::value::Function;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum OpCode {
     Constant(f64),
     Bool(bool),
@@ -30,7 +32,7 @@ pub enum OpCode {
     Return,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Instruction {
     pub code: OpCode,
     pub line: i32,

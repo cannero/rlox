@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 use crate::{chunk::{Chunk, OpCodeVisitor}, op_code::{Instruction, OpCode}};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,7 +41,7 @@ impl From<String> for Value {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Function {
     arity: usize,
     name: String,

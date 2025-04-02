@@ -1,10 +1,12 @@
+use serde::{Serialize, Deserialize};
+
 use crate::op_code::{Instruction, OpCode};
 
 pub trait OpCodeVisitor {
     fn operate(&mut self, code: &OpCode, line: i32);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
 }

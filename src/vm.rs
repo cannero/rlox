@@ -86,6 +86,19 @@ impl VM {
         vm
     }
 
+    pub fn run_function(&mut self, function: Function, debug: bool) -> InterpretResult {
+        if debug {
+            let mut debugger = Debugger::new();
+            debugger.disassemble_chunk(&function, "code");
+        }
+
+        self.call(function);
+        match self.run() {
+            Ok(()) => InterpretResult::Ok,
+            Err(res) => res,
+        }
+    }
+
     pub fn interpret(&mut self, source: String, debug: bool) -> InterpretResult {
         match compile(source, debug) {
             Ok(function) => {
